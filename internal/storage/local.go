@@ -5,8 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"uuid"
-
 	"github.com/google/uuid"
 )
 
