@@ -82,78 +82,97 @@ the whole codebase.
 
 ## 3. Phase 1 — MVP
 
-### Step 1.1 — Project skeleton
-```
-video-service/
-  cmd/server/main.go        # entrypoint: wires everything together
-  internal/
-    api/                    # HTTP handlers
-    job/                    # Job struct, status, Store interface
-    worker/                 # Worker pool
-    ffmpeg/                 # FFmpeg wrapper
-    storage/                # Storage interface
-  deploy/
-    k8s/                    # Kubernetes manifests (added in Phase 3)
-  go.mod
-```
-Initialize the module, create the folders, no logic yet.
+**Approach: top-down** Get a bare server running first,
+then add exactly one real endpoint, and only build the supporting
+packages (`job`, `storage`, `ffmpeg`, `worker`) at the moment an endpoint
+actually needs them. This avoids building abstractions in isolation
+before there's a real caller to prove they're shaped correctly.
 
-### Step 1.2 — Core job types (`internal/job`)
-Define the shared vocabulary every other package uses:
-- `Status` enum: `queued`, `processing`, `done`, `failed`
-- `Job` struct: `ID`, `InputKey`, `OutputKeys`, `Status`, `Error`,
-  `CreatedAt`, `UpdatedAt`
-- `Store` interface: `Save(*Job) error`, `Get(id string) (*Job, error)`
+Each step below ends with something you can actually run and hit with
+`curl` — no step is "just types with nothing to test."
 
-Get this right early — it's referenced by the API, the worker pool, and
-every future store implementation (Postgres included).
+### Step 1.1 — Bare server
+- `cmd/server/main.go` with a plain `net/http` server and a single
+  `/health` route returning `"ok"`.
+- No other packages exist yet.
+- **Check:** `go run ./cmd/server`, then `curl localhost:8080/health` →
+  `ok`.
 
-### Step 1.3 — In-memory job store
-Implement `Store` with a `map[string]*Job` guarded by a mutex. Fine for
-dev; explicitly not safe across multiple API instances (no shared state
-between processes) — that's what Phase 2's Postgres store replaces.
+### Step 1.2 — Upload endpoint (stubbed)
+- Add `POST /videos` directly in `main.go` (or a new `internal/api`
+  package once it stops being trivial). At this point it can just accept
+  the multipart file and return a fake job ID — no real processing yet.
+- This is where you first decide the request/response shape (what the
+  client sends, what JSON comes back), before building anything underneath
+  it.
+- **Check:** `curl -F "video=@sample.mp4" localhost:8080/videos` returns
+  something like `{"job_id": "..."}`.
 
-### Step 1.4 — Storage interface (`internal/storage`)
+### Step 1.3 — Real file storage (`internal/storage`)
+- The upload handler needs somewhere real to put the uploaded file — this
+  is the trigger to build `internal/storage` now, not before.
 - `Storage` interface: `Save(name string, r io.Reader) (key string, err
-  error)`, `Open(key string) (io.ReadCloser, error)`
-- Local disk implementation: writes to a base directory, keys are
+  error)`, `Open(key string) (io.ReadCloser, error)`.
+- `LocalDisk` implementation: writes to a base directory, keys are
   UUID-prefixed filenames.
+- Wire it into the upload handler from Step 1.2: it now actually saves the
+  file and returns a real key.
+- **Check:** upload a file, confirm it actually appears on disk under the
+  configured directory.
+
+### Step 1.4 — Job tracking (`internal/job`)
+- The client needs to check progress after uploading — that requirement
+  is what justifies building this now.
+- `Status` enum: `queued`, `processing`, `done`, `failed`.
+- `Job` struct: `ID`, `InputKey`, `OutputKeys`, `Status`, `Error`,
+  `CreatedAt`, `UpdatedAt`.
+- `Store` interface + in-memory implementation (`map[string]*Job` guarded
+  by a mutex).
+- Upload handler now creates a real `Job` (status `queued`) instead of a
+  fake ID.
+- Add `GET /jobs/{id}` returning the job's current status.
+- **Check:** upload a file, then `curl localhost:8080/jobs/{id}` shows
+  `"status": "queued"`.
 
 ### Step 1.5 — FFmpeg wrapper (`internal/ffmpeg`)
-Shell out via `os/exec` rather than a Go binding — gives full control over
-flags and is exactly what the bindings do internally anyway.
-- `Transcode(ctx, input, output, preset string) error` — libx264 + aac
+- Nothing processes the video yet — jobs just sit at `queued` forever.
+  This step adds the ability to actually transcode, tested completely on
+  its own before it's wired into anything concurrent.
+- Shell out via `os/exec` (not a Go binding) — full control over flags,
+  and it's what the bindings do internally anyway.
+- `Transcode(ctx, input, output, preset string) error` — libx264 + aac.
 - `Thumbnail(ctx, input, output string, atSeconds int) error` — single
-  frame extraction
-
-Test this in isolation (call it directly from a small `main.go` or a test)
-before wiring it into the worker pool — much easier to debug FFmpeg flag
-issues without concurrency in the mix.
+  frame extraction.
+- **Check:** call `Transcode` directly from a throwaway test against a
+  real sample file — confirm the output plays. Don't wire it into the
+  server yet.
 
 ### Step 1.6 — Worker pool (`internal/worker`)
-- Fixed-size pool of goroutines reading from a buffered channel of `*Job`
-- Each worker: mark job `processing` → run FFmpeg → mark `done` or
-  `failed` with error message → save via `Store`
-- Pool size: start with `runtime.NumCPU()` since transcoding is CPU-bound
+- Now that storage, job tracking, and FFmpeg all exist, this is the piece
+  that connects them: pull a job → mark `processing` → call FFmpeg → mark
+  `done`/`failed` → save.
+- Fixed-size pool of goroutines reading from a buffered channel of
+  `*Job`. Pool size starts at `runtime.NumCPU()` since transcoding is
+  CPU-bound.
+- Upload handler now enqueues the job into the pool instead of leaving it
+  at `queued` forever.
+- This is where concurrency bugs like to hide (double-processing, races on
+  job state) — keep the worker function small and push all shared-state
+  access through the `Store` interface.
+- **Check:** upload a file, poll `GET /jobs/{id}` and watch status move
+  `queued` → `processing` → `done`, and confirm the transcoded output
+  exists in storage.
 
-This is where concurrency bugs like to hide (double-processing, races on
-job state) — keep the worker function small and push all shared-state
-access through the `Store` interface.
+### Step 1.7 — Consolidate into `internal/api`
+- By now `main.go` has grown a few inline handlers — move them into
+  `internal/api` as the routes stop being trivial, so `main.go` goes back
+  to just wiring dependencies together and starting the server.
 
-### Step 1.7 — API layer (`internal/api`)
-- `POST /videos` — accept multipart upload, save via `Storage`, create
-  `Job`, enqueue, return `job_id`
-- `GET /jobs/{id}` — look up job via `Store`, return status/output keys
-
-### Step 1.8 — Wire it up (`cmd/server/main.go`)
-Construct the local disk storage, in-memory store, FFmpeg runner, worker
-pool, and API router; start the HTTP server.
-
-### Step 1.9 — End-to-end check
-Upload one video with `curl`, poll the status endpoint until `done`,
-confirm the output file exists in the local storage directory. This is
-the MVP checkpoint — everything after this is about durability and scale,
-not new pipeline behavior.
+### Step 1.8 — End-to-end check
+- Fresh run: upload one real video with `curl`, poll status until `done`,
+  confirm the output file exists in local storage. This is the MVP
+  checkpoint — everything after this is about durability and scale, not
+  new pipeline behavior.
 
 ---
 
@@ -306,6 +325,6 @@ go mod tidy
 go run ./cmd/server
 ```
 
-Build in the order laid out in Phase 1 above — skeleton, job types, job
-store, storage, FFmpeg wrapper, worker pool, API layer, then the
-end-to-end check.
+Build in the order laid out in Phase 1 above — bare server, upload
+endpoint, storage, job tracking, FFmpeg wrapper, worker pool, then
+consolidate into `internal/api` and do the end-to-end check.
