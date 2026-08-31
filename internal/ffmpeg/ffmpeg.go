@@ -15,19 +15,20 @@ func NewRunner(workDir string) *Runner {
 }
 
 func (r *Runner) Transcode(ctx context.Context, input, output, preset string) error {
-	cmd := exec.CommandContext(ctx, "ffmpeg",
+	cmd := exec.CommandContext(ctx, "ffmpeg", 
 		"-i", input,
 		"-c:v", "libx264",
 		"-preset", preset,
 		"-c:a", "aac",
 		"-y", output,
 	)
-	out, err := cmd.CombinedOutput()
+
+	out, err := cmd.CombinedOutput();
 	if err != nil {
-		return fmt.Errorf("ffmpeg transcode failed: %w\n%s", err, out)
+		return fmt.Errorf("ffmpeg transcode failed: %w\n%s", err, out);
 	}
 	return nil
-}
+}	
 
 func (r *Runner) Thumbnail(ctx context.Context, input, output string, atSeconds int) error {
 	cmd := exec.CommandContext(ctx, "ffmpeg",

@@ -12,3 +12,11 @@ func TestTranscodeManual(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestThumbnailManual(t *testing.T) {
+	r := NewRunner(".")
+	err := r.Thumbnail(context.Background(), "sample.mp4", "thumb.jpg", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
