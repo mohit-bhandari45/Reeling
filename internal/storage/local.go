@@ -35,6 +35,6 @@ func (d *LocalDisk) Save(name string, r io.Reader) (string, error) {
 	return key, nil;
 }
 
-func (d *LocalDisk) Get(key string) (io.Reader, error) {
+func (d *LocalDisk) Open(key string) (io.ReadCloser, error) {
 	return os.Open(filepath.Join(d.BaseDir, key));
 }

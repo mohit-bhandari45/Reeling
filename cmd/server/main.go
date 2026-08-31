@@ -12,7 +12,7 @@ var fileStorage storage.Storage
 
 func main() {
 	var err error
-	fileStorage, err := storage.NewLocalDisk("./data/uploads")
+	fileStorage, err = storage.NewLocalDisk("./data/uploads")
 	if err != nil {
 		log.Fatal(err)
 	}
