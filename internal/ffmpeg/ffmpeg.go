@@ -6,12 +6,10 @@ import (
 	"os/exec"
 )
 
-type Runner struct {
-	WorkDir string
-}
+type Runner struct {}
 
-func NewRunner(workDir string) *Runner {
-	return &Runner{WorkDir: workDir}
+func NewRunner() *Runner {
+	return &Runner{}
 }
 
 func (r *Runner) Transcode(ctx context.Context, input, output, preset string) error {
