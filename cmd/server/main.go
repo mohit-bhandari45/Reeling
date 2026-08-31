@@ -29,7 +29,7 @@ func main() {
 	})
 
 	mux.HandleFunc("/videos", HandleUpload)
-	mux.HandleFunc("/jobs", HandleGetJob)
+	mux.HandleFunc("/jobs/", HandleGetJob)
 
 	log.Println("Server started on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
@@ -51,6 +51,7 @@ func HandleUpload(w http.ResponseWriter, r *http.Request) {
 	file, header, err := r.FormFile("video")
 	if err != nil {
 		http.Error(w, "missing 'video' field in form data", http.StatusBadRequest)
+		return;
 	}
 	defer file.Close()
 
@@ -72,12 +73,11 @@ func HandleUpload(w http.ResponseWriter, r *http.Request) {
 		return;
 	}
 
+	log.Printf("created job %s for upload %s", j.ID, key)
+
 	w.Header().Set("Content-type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(map[string]string{
-		"job_id": "fake-job-id-123",
-		"input_key" : key,
-	})
+	json.NewEncoder(w).Encode(j);
 }
 
 func HandleGetJob(w http.ResponseWriter, r *http.Request) {
