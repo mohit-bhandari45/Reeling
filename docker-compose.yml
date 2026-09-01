@@ -1,11 +1,11 @@
 services:
   postgres:
-    image: postgres:16
+    build: ./docker/postgres
     container_name: reeling-postgres
     environment:
-      POSTGRES_USER: reeling
-      POSTGRES_PASSWORD: reeling
-      POSTGRES_DB: reeling
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
