@@ -83,3 +83,16 @@ func (s *S3Storage) Save(name string, r io.Reader) (string, error) {
 
 	return key, nil
 }
+
+func (s *S3Storage) Open(key string) (io.ReadCloser, error) {
+	result, err := s.client.GetObject(context.Background(), &s3.GetObjectInput{
+		Bucket: &s.bucket,
+		Key: aws.String(key),
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object from s3: %w", err)
+	}
+
+	return result.Body, nil;
+}
