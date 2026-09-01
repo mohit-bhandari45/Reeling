@@ -16,7 +16,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	jobStore := job.NewMemoryStore()
+
+	db, err := job.NewPostgresConn("postgres://reeling:reeling@localhost:5432/reeling")
+	if err != nil {
+		log.Fatal(err)
+	}
+	jobStore := job.NewPostgresStore(db);
 
 	runner := ffmpeg.NewRunner();
 	pool := worker.NewPool(100, jobStore, fileStorage, runner);
