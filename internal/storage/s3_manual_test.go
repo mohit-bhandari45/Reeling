@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"io"
 	"os"
 	"testing"
 
@@ -44,4 +45,32 @@ func TestS3SaveManual(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("uploaded with key: %s", key)
+}
+
+func TestS3OpenManual(t *testing.T) {
+	client, err := NewS3Client("http://localhost:9000", "reeling", "reelingreeling")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s3Storage := NewS3Storage(client, "reeling-videos")
+
+	// use the key printed by TestS3SaveManual's t.Logf output
+	reader, err := s3Storage.Open("PASTE-THE-KEY-FROM-SAVE-TEST-HERE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+
+	out, err := os.Create("downloaded.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
+
+	n, err := io.Copy(out, reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("downloaded %d bytes", n)
 }
