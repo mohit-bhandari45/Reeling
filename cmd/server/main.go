@@ -7,12 +7,15 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/mohit-bhandari45/Reeling/internal/ffmpeg"
 	"github.com/mohit-bhandari45/Reeling/internal/job"
 	"github.com/mohit-bhandari45/Reeling/internal/storage"
+	"github.com/mohit-bhandari45/Reeling/internal/worker"
 )
 
 var fileStorage storage.Storage
 var jobStore job.Store
+var pool *worker.Pool
 
 func main() {
 	ls, err := storage.NewLocalDisk("./data/uploads")
@@ -21,6 +24,9 @@ func main() {
 	}
 	fileStorage = ls
 	jobStore = job.NewMemoryStore()
+
+	runner := ffmpeg.NewRunner();
+	pool = worker.NewPool(100, jobStore, fileStorage, runner);
 
 	mux := http.NewServeMux()
 
@@ -67,7 +73,7 @@ func HandleUpload(w http.ResponseWriter, r *http.Request) {
 		InputKey: key,
 		Status: job.StatusQueued,
 	}
-	if err := jobStore.Save(j); err != nil {
+	if err := pool.Enqueue(j); err != nil {
 		log.Printf("failed to save job: %v", err)
 		http.Error(w, "failed to create job", http.StatusInternalServerError)
 		return;
