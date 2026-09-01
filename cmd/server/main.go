@@ -1,23 +1,37 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/mohit-bhandari45/Reeling/internal/api"
 	"github.com/mohit-bhandari45/Reeling/internal/ffmpeg"
 	"github.com/mohit-bhandari45/Reeling/internal/job"
 	"github.com/mohit-bhandari45/Reeling/internal/storage"
 	"github.com/mohit-bhandari45/Reeling/internal/worker"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("no .env file found, reading from real environment")
+	}
+
 	fileStorage, err := storage.NewLocalDisk("./data/uploads")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	db, err := job.NewPostgresConn("postgres://reeling:reeling@localhost:5432/reeling")
+	connString := fmt.Sprintf(
+		"postgres://%s:%s@localhost:5432/%s",
+		os.Getenv("POSTGRES_USER"),
+		os.Getenv("POSTGRES_PASSWORD"),
+		os.Getenv("POSTGRES_DB"),
+	)
+
+	db, err := job.NewPostgresConn(connString)
 	if err != nil {
 		log.Fatal(err)
 	}
