@@ -32,3 +32,34 @@ func NewS3Client(endpoint, accessKey, secretKey string) (*s3.Client, error) {
 
 	return client, nil;
 }
+
+func EnsureBucket(ctx context.Context, client *s3.Client, bucket string) error {
+	_, err := client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(bucket),
+	});
+
+	if err == nil {
+		return nil // bucket already exists
+	}
+
+	_, err = client.CreateBucket(ctx, &s3.CreateBucketInput{
+		Bucket: aws.String(bucket),
+	});
+	if err != nil {
+		return fmt.Errorf("failed to create bucket: %w", err)
+	}
+	
+	return nil;
+}
+
+type S3Storage struct {
+	client *s3.Client
+	bucket string
+}
+
+func NewS3Storage(client *s3.Client, bucket string) *S3Storage {
+	return &S3Storage{
+		client: client,
+		bucket: bucket,
+	}
+}
