@@ -52,5 +52,31 @@ func (s *PostgresStore) Get(id string) (*Job, error) {
 		SELECT id, input_key, output_keys, status, error, created_at, updated_at
 		FROM jobs
 		WHERE id = $1
-	`;
+	`
+
+	var j Job
+	var outputKeys []string
+	var errText sql.NullString;
+
+	err := s.db.QueryRow(query, id).Scan(
+		&j.ID,
+		&j.InputKey,
+		pq.Array(&outputKeys),
+		&j.Status,
+		&errText,
+		&j.CreatedAt,
+		&j.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("job %s not found", id)
+		}
+		return nil, fmt.Errorf("failed to get job: %w", err)
+	}
+
+	j.OutputKeys = outputKeys;
+	j.Error = errText.String;
+
+	return &j, nil
 }
