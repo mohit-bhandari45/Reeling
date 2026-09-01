@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: reeling-postgres
+    environment:
+      POSTGRES_USER: reeling
+      POSTGRES_PASSWORD: reeling
+      POSTGRES_DB: reeling
+    ports:
+      - "5432:5432"
+    volumes:
+      - reeling-pgdata:/var/lib/postgresql/data
+
+volumes:
+  reeling-pgdata:
