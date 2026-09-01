@@ -33,7 +33,7 @@ func TestS3SaveManual(t *testing.T) {
 
 	s3Storage := NewS3Storage(client, "reeling-videos")
 
-	file, err := os.Open("sample.mp4")
+	file, err := os.Open("../../sample.mp4")
 	if err != nil {
 		t.Fatal(err)
 	}
