@@ -34,6 +34,16 @@ func NewPool(size int, store job.Store, files storage.Storage, runner *ffmpeg.Ru
 	return p
 }
 
+func (p *Pool) Enqueue(j *job.Job) error {
+	j.Status = job.StatusQueued;
+	if err := p.store.Save(j); err != nil {
+		return err;
+	}
+
+	p.jobs <- j;
+	return nil;
+}
+
 func (p *Pool) startWorker(id int) {
 	for j := range p.jobs {
 		p.process(id, j)
@@ -43,7 +53,7 @@ func (p *Pool) startWorker(id int) {
 func (p *Pool) process(workerID int, j *job.Job) {
 	// mark process as processing
 	j.Status = job.StatusProcessing
-	if err := p.store.Save(j); j != nil {
+	if err := p.store.Save(j); err != nil {
 		log.Printf("worker %d: failed to mark job %s as processing: %v", workerID, j.ID, err)
 		return
 	}
