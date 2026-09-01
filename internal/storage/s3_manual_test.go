@@ -56,7 +56,7 @@ func TestS3OpenManual(t *testing.T) {
 	s3Storage := NewS3Storage(client, "reeling-videos")
 
 	// use the key printed by TestS3SaveManual's t.Logf output
-	reader, err := s3Storage.Open("PASTE-THE-KEY-FROM-SAVE-TEST-HERE")
+	reader, err := s3Storage.Open("6ee8e791-a6fb-4902-8d90-1f884f3f219c-sample.mp4")
 	if err != nil {
 		t.Fatal(err)
 	}
