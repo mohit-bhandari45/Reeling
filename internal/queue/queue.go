@@ -42,3 +42,25 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream) error {
 
 	return nil;
 }
+
+func Publish(ctx context.Context, js jetstream.JetStream, data []byte) error {
+	_, err := js.Publish(ctx, SubjectName, data);
+	if err != nil {
+		return fmt.Errorf("failed to publish message: %w", err)
+	}
+
+	return nil;
+}
+
+func CreateConsumer(ctx context.Context, js jetstream.JetStream) (jetstream.Consumer, error) {
+	cons, err := js.CreateOrUpdateConsumer(ctx, StreamName, jetstream.ConsumerConfig{
+		Durable: "workers",
+		AckPolicy: jetstream.AckExplicitPolicy,
+		FilterSubject: SubjectName,
+	});
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create consumer: %w", err)
+	}
+	return cons, nil
+}
