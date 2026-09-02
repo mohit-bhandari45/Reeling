@@ -24,6 +24,17 @@ services:
     volumes:
       - reeling-miniodata:/data
 
+  nats:
+    image: nats:2.10
+    container_name: reeling-nats
+    command: "-js"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - reeling-natsdata:/data
+
 volumes:
   reeling-pgdata:
   reeling-miniodata:
+  reeling-natsdata:
