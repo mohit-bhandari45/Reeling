@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log"
 	"os"
@@ -9,26 +10,38 @@ import (
 
 	"github.com/mohit-bhandari45/Reeling/internal/ffmpeg"
 	"github.com/mohit-bhandari45/Reeling/internal/job"
+	"github.com/mohit-bhandari45/Reeling/internal/queue"
 	"github.com/mohit-bhandari45/Reeling/internal/storage"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 type Pool struct {
-	jobs   chan *job.Job
 	store  job.Store
 	files  storage.Storage
 	ffmpeg *ffmpeg.Runner
+	js jetstream.JetStream
 }
 
-func NewPool(size int, store job.Store, files storage.Storage, runner *ffmpeg.Runner) *Pool {
+func NewPool(size int, store job.Store, files storage.Storage, runner *ffmpeg.Runner, js jetstream.JetStream) *Pool {
 	p := &Pool{
-		jobs:   make(chan *job.Job, 100),
 		store:  store,
 		files:  files,
 		ffmpeg: runner,
+		js: js,
+	}
+
+	ctx := context.Background();
+	if err := queue.EnsureStream(ctx, js); err != nil {
+		log.Fatalf("failed to ensure stream: %v", err)
+	}
+
+	cons, err := queue.CreateConsumer(ctx, js);
+	if err != nil {
+		log.Fatalf("failed to create consumer: %v", err)
 	}
 
 	for i := 0; i < size; i++ {
-		go p.startWorker(i)
+		go p.startWorker(i, cons)
 	}
 
 	return p
@@ -40,13 +53,34 @@ func (p *Pool) Enqueue(j *job.Job) error {
 		return err;
 	}
 
-	p.jobs <- j;
-	return nil;
+	data, err := json.Marshal(j);
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	return queue.Publish(ctx, p.js, data);
 }
 
-func (p *Pool) startWorker(id int) {
-	for j := range p.jobs {
-		p.process(id, j)
+func (p *Pool) startWorker(id int, cons jetstream.Consumer) {
+	for {
+		msgs, err := cons.Fetch(1);
+		if err != nil {
+			log.Printf("worker %d: fetch error: %v", id, err)
+			continue
+		}
+
+		for msg := range msgs.Messages() {
+			var j job.Job;
+			if err := json.Unmarshal(msg.Data(), &j); err != nil {
+				log.Printf("worker %d: failed to unmarshal job: %v", id, err)
+				msg.Ack()
+				continue
+			}
+
+			p.process(id, &j);
+			msg.Ack();
+		}
 	}
 }
 

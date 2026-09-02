@@ -11,6 +11,7 @@ import (
 	"github.com/mohit-bhandari45/Reeling/internal/api"
 	"github.com/mohit-bhandari45/Reeling/internal/ffmpeg"
 	"github.com/mohit-bhandari45/Reeling/internal/job"
+	"github.com/mohit-bhandari45/Reeling/internal/queue"
 	"github.com/mohit-bhandari45/Reeling/internal/storage"
 	"github.com/mohit-bhandari45/Reeling/internal/worker"
 )
@@ -19,17 +20,17 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("no .env file found, reading from real environment")
 	}
-	s3Client, err := storage.NewS3Client("http://localhost:9000", os.Getenv("MINIO_ROOT_USER"), os.Getenv("MINIO_ROOT_PASSWORD"));
+	s3Client, err := storage.NewS3Client("http://localhost:9000", os.Getenv("MINIO_ROOT_USER"), os.Getenv("MINIO_ROOT_PASSWORD"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	ctx := context.Background();
+	ctx := context.Background()
 	if err := storage.EnsureBucket(ctx, s3Client, "reeling-videos"); err != nil {
 		log.Fatal(err)
 	}
 
-	fileStorage := storage.NewS3Storage(s3Client, "reeling-videos");
+	fileStorage := storage.NewS3Storage(s3Client, "reeling-videos")
 
 	connString := fmt.Sprintf(
 		"postgres://%s:%s@localhost:5432/%s",
@@ -42,12 +43,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	jobStore := job.NewPostgresStore(db);
+	jobStore := job.NewPostgresStore(db)
 
-	runner := ffmpeg.NewRunner();
-	pool := worker.NewPool(100, jobStore, fileStorage, runner);
-	
-	server := api.NewServer(fileStorage, jobStore, pool);
+	runner := ffmpeg.NewRunner()
+
+	nc, js, err := queue.NewConn("nats://localhost:4222")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer nc.Close()
+
+	pool := worker.NewPool(100, jobStore, fileStorage, runner, js)
+
+	server := api.NewServer(fileStorage, jobStore, pool)
 
 	mux := http.NewServeMux()
 
