@@ -163,7 +163,7 @@ func (p *Pool) process(workerID int, j *job.Job) {
 
 const MAX_ATTEMPTS = 3;
 
-func (p *Pool) handleFailure(workerId int, j *job.Job, cause error) {
+func (p *Pool) handleFailure(workerID int, j *job.Job, cause error) {
 	j.Attempts++;
 	j.Error = cause.Error();
 
@@ -189,5 +189,5 @@ func (p *Pool) handleFailure(workerId int, j *job.Job, cause error) {
 		return
 	}
 
-	log.Printf("worker %d: job %s failed (attempt %d/%d), requeued: %v", workerID, j.ID, j.Attempts, MaxAttempts, cause)
+	log.Printf("worker %d: job %s failed (attempt %d/%d), requeued: %v", workerID, j.ID, j.Attempts, MAX_ATTEMPTS, cause)
 }
