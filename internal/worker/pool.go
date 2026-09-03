@@ -1,12 +1,16 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"log"
+	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/mohit-bhandari45/Reeling/internal/ffmpeg"
 	"github.com/mohit-bhandari45/Reeling/internal/job"
@@ -85,10 +89,16 @@ func (p *Pool) startWorker(id int, cons jetstream.Consumer) {
 }
 
 func (p *Pool) process(workerID int, j *job.Job) {
+	start := time.Now()
+
 	// check if this is already processed
 	existing, err := p.store.Get(j.ID);
 	if err == nil && (existing.Status == job.StatusDone || existing.Status == job.StatusFailed) {
-		log.Printf("worker %d: job %s already %s, skipping reprocessing", workerID, j.ID, existing.Status)
+		slog.Info("job already finished, skipping reprocessing",
+			"worker_id", workerID,
+			"job_id", j.ID,
+			"status", existing.Status,
+		)
 		return;
 	}
 
@@ -158,19 +168,32 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	j.Status = job.StatusDone;
 	j.OutputKeys = []string{outputKey};
 	p.store.Save(j)
-	log.Printf("worker %d: job %s done, output=%s", workerID, j.ID, outputKey)
+	slog.Info("job completed",
+		"worker_id", workerID,
+		"job_id", j.ID,
+		"output_key", outputKey,
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
+
+	p.sendWebhook(workerID, j);
 }
 
-const MAX_ATTEMPTS = 3;
+const MaxAttempts = 3;
 
 func (p *Pool) handleFailure(workerID int, j *job.Job, cause error) {
 	j.Attempts++;
 	j.Error = cause.Error();
 
-	if j.Attempts >= MAX_ATTEMPTS {
+	if j.Attempts >= MaxAttempts {
 		j.Status = job.StatusFailed;
 		p.store.Save(j);
-		log.Printf("worker %d: job %s permanently failed after %d attempts: %v", workerID, j.ID, j.Attempts, cause)
+		slog.Error("job permanently failed",
+			"worker_id", workerID,
+			"job_id", j.ID,
+			"attempts", j.Attempts,
+			"error", cause,
+		)
+		p.sendWebhook(workerID, j);
 		return
 	}
 
@@ -179,15 +202,55 @@ func (p *Pool) handleFailure(workerID int, j *job.Job, cause error) {
 
 	data, err := json.Marshal(j);
 	if err != nil {
-		log.Printf("worker %d: failed to marshal job %s for retry: %v", workerID, j.ID, err)
+		slog.Error("failed to marshal job for retry",
+			"worker_id", workerID,
+			"job_id", j.ID,
+			"error", err,
+		)
 		return
 	}
 
 	ctx := context.Background();
 	if err := queue.Publish(ctx, p.js, data); err != nil {
-		log.Printf("worker %d: failed to republish job %s for retry: %v", workerID, j.ID, err)
+		slog.Error("failed to republish job for retry",
+			"worker_id", workerID,
+			"job_id", j.ID,
+			"error", err,
+		)
 		return
 	}
 
-	log.Printf("worker %d: job %s failed (attempt %d/%d), requeued: %v", workerID, j.ID, j.Attempts, MAX_ATTEMPTS, cause)
+	slog.Warn("job failed, requeued for retry",
+		"worker_id", workerID,
+		"job_id", j.ID,
+		"attempt", j.Attempts,
+		"max_attempts", MaxAttempts,
+		"error", cause,
+	)
+}
+
+func (p *Pool) sendWebhook(workerID int, j *job.Job) {
+	if j.WebhookURL == "" {
+		return;
+	}
+
+	data, err := json.Marshal(j);
+	if err != nil {
+		slog.Error("failed to marshal job for webhook", "worker_id", workerID, "job_id", j.ID, "error", err)
+		return
+	}
+
+	resp, err := http.Post(j.WebhookURL, "application/json", bytes.NewReader(data));
+	if err != nil {
+		slog.Error("failed to send webhook", "worker_id", workerID, "job_id", j.ID, "webhook_url", j.WebhookURL, "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	slog.Info("webhook sent",
+		"worker_id", workerID,
+		"job_id", j.ID,
+		"webhook_url", j.WebhookURL,
+		"status_code", resp.StatusCode,
+	)
 }

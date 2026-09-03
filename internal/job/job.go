@@ -18,6 +18,7 @@ type Job struct {
 	Status Status `json:"status"`
 	Error string `json:"error,omitempty"`
 	Attempts int `json:"attempts"`
+	WebhookURL  string    `json:"webhook_url,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

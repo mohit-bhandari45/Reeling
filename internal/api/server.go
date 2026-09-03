@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -46,23 +46,29 @@ func (s *Server) HandleUpload(w http.ResponseWriter, r *http.Request) {
 
 	key, err := s.files.Save(header.Filename, file)
 	if err != nil {
-		log.Printf("failed to save upload: %v", err)
+		slog.Error("failed to save upload", "error", err)
 		http.Error(w, "failed to save file", http.StatusInternalServerError)
 		return
 	}
+
+	webhookURL := r.FormValue("webhook_url");
 	
 	j := &job.Job{
 		ID: uuid.NewString(),
 		InputKey: key,
 		Status: job.StatusQueued,
+		WebhookURL: webhookURL,
 	}
 	if err := s.pool.Enqueue(j); err != nil {
-		log.Printf("failed to save job: %v", err)
+		slog.Error("failed to enqueue job", "job_id", j.ID, "error", err)
 		http.Error(w, "failed to create job", http.StatusInternalServerError)
 		return;
 	}
 
-	log.Printf("created job %s for upload %s", j.ID, key)
+	slog.Info("job created",
+		"job_id", j.ID,
+		"input_key", key,
+	)
 
 	w.Header().Set("Content-type", "application/json")
 	w.WriteHeader(http.StatusAccepted)

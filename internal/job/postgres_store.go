@@ -31,17 +31,18 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 
 func (s *PostgresStore) Save(j *Job) error {
 	query := `
-		INSERT INTO jobs (id, input_key, output_keys, status, error, attempts, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, now(), now())
+		INSERT INTO jobs (id, input_key, output_keys, status, error, attempts, webhook_url, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
 		ON CONFLICT (id) DO UPDATE SET
 			input_key = EXCLUDED.input_key,
 			output_keys = EXCLUDED.output_keys,
 			status = EXCLUDED.status,
 			error = EXCLUDED.error,
 			attempts = EXCLUDED.attempts,
+			webhook_url = EXCLUDED.webhook_url,
 			updated_at = now()
 	`
-	_, err := s.db.Exec(query, j.ID, j.InputKey, pq.Array(j.OutputKeys), j.Status, j.Error, j.Attempts)
+	_, err := s.db.Exec(query, j.ID, j.InputKey, pq.Array(j.OutputKeys), j.Status, j.Error, j.Attempts, j.WebhookURL)
 	if err != nil {
 		return fmt.Errorf("failed to save job: %w", err)
 	}
@@ -50,7 +51,7 @@ func (s *PostgresStore) Save(j *Job) error {
 
 func (s *PostgresStore) Get(id string) (*Job, error) {
 	query := `
-		SELECT id, input_key, output_keys, status, error, attempts, created_at, updated_at
+		SELECT id, input_key, output_keys, status, error, attempts, webhook_url, created_at, updated_at
 		FROM jobs
 		WHERE id = $1
 	`
@@ -58,6 +59,7 @@ func (s *PostgresStore) Get(id string) (*Job, error) {
 	var j Job
 	var outputKeys []string
 	var errText sql.NullString;
+	var webhookURL sql.NullString
 
 	err := s.db.QueryRow(query, id).Scan(
 		&j.ID,
@@ -66,6 +68,7 @@ func (s *PostgresStore) Get(id string) (*Job, error) {
 		&j.Status,
 		&errText,
 		&j.Attempts,
+		&webhookURL,
 		&j.CreatedAt,
 		&j.UpdatedAt,
 	)
@@ -79,6 +82,7 @@ func (s *PostgresStore) Get(id string) (*Job, error) {
 
 	j.OutputKeys = outputKeys;
 	j.Error = errText.String;
+	j.WebhookURL = webhookURL.String
 
 	return &j, nil
 }
