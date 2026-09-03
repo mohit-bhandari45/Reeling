@@ -31,16 +31,17 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 
 func (s *PostgresStore) Save(j *Job) error {
 	query := `
-		INSERT INTO jobs (id, input_key, output_keys, status, error, created_at, updated_at)
+		INSERT INTO jobs (id, input_key, output_keys, status, error, attempts, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, now(), now())
 		ON CONFLICT (id) DO UPDATE SET
 			input_key = EXCLUDED.input_key,
 			output_keys = EXCLUDED.output_keys,
 			status = EXCLUDED.status,
 			error = EXCLUDED.error,
+			attempts = EXCLUDED.attempts,
 			updated_at = now()
 	`
-	_, err := s.db.Exec(query, j.ID, j.InputKey, pq.Array(j.OutputKeys), j.Status, j.Error)
+	_, err := s.db.Exec(query, j.ID, j.InputKey, pq.Array(j.OutputKeys), j.Status, j.Error, j.Attempts)
 	if err != nil {
 		return fmt.Errorf("failed to save job: %w", err)
 	}
@@ -49,7 +50,7 @@ func (s *PostgresStore) Save(j *Job) error {
 
 func (s *PostgresStore) Get(id string) (*Job, error) {
 	query := `
-		SELECT id, input_key, output_keys, status, error, created_at, updated_at
+		SELECT id, input_key, output_keys, status, error, attempts, created_at, updated_at
 		FROM jobs
 		WHERE id = $1
 	`
@@ -64,6 +65,7 @@ func (s *PostgresStore) Get(id string) (*Job, error) {
 		pq.Array(&outputKeys),
 		&j.Status,
 		&errText,
+		&j.Attempts,
 		&j.CreatedAt,
 		&j.UpdatedAt,
 	)
