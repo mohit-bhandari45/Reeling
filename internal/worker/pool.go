@@ -85,6 +85,12 @@ func (p *Pool) startWorker(id int, cons jetstream.Consumer) {
 }
 
 func (p *Pool) process(workerID int, j *job.Job) {
+	existing, err := p.store.Get(j.ID);
+	if err == nil && (existing.Status == job.StatusDone || existing.Status == job.StatusFailed) {
+		log.Printf("worker %d: job %s already %s, skipping reprocessing", workerID, j.ID, existing.Status)
+		return;
+	}
+
 	// mark process as processing
 	j.Status = job.StatusProcessing
 	if err := p.store.Save(j); err != nil {
