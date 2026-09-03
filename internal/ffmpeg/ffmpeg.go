@@ -12,14 +12,31 @@ func NewRunner() *Runner {
 	return &Runner{}
 }
 
-func (r *Runner) Transcode(ctx context.Context, input, output, preset string) error {
-	cmd := exec.CommandContext(ctx, "ffmpeg", 
+var resolutionHeights = map[string]string {
+	"1080p": "1080",
+	"720p":  "720",
+	"480p":  "480",
+	"360p":  "360",
+}
+
+func (r *Runner) Transcode(ctx context.Context, input, output, preset, resolution string) error {
+	args := []string {
 		"-i", input,
 		"-c:v", "libx264",
 		"-preset", preset,
-		"-c:a", "aac",
-		"-y", output,
-	)
+	}
+
+	if resolution != "" {
+		height, ok := resolutionHeights[resolution]
+		if !ok {
+			return fmt.Errorf("unknown resolution: %s", resolution)
+		}
+		args = append(args, "-vf", fmt.Sprintf("scale=-2:%s", height));
+	}
+
+	args = append(args, "-c:a", "aac","-y", output);
+
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 
 	out, err := cmd.CombinedOutput();
 	if err != nil {

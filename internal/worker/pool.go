@@ -123,7 +123,6 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	// inputFile is reader -> but ffmpeg needs actual path
 	// ffmpeg -i /tmp/abc123-input.mp4 ...  -> needs path
 	tempInputPath := filepath.Join(os.TempDir(), j.ID+"-input.mp4");
-	tempOutputPath := filepath.Join(os.TempDir(), j.ID+"-output.mp4");
 
 	tempFile, err := os.Create(tempInputPath);
 	if err != nil {
@@ -139,39 +138,54 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	}
 	tempFile.Close();
 	defer os.Remove(tempInputPath);
-
+	
 	// transcode now
-	ctx := context.Background();
-	err = p.ffmpeg.Transcode(ctx, tempInputPath, tempOutputPath, "medium");
-	if err != nil {
-		p.handleFailure(workerID, j, err);
-		return
+	renditions := j.Renditions;
+	if len(renditions) == 0 {
+		renditions = []string{""}
 	}
-	defer os.Remove(tempOutputPath);
 
-	// open the file
-	outputFile, err := os.Open(tempOutputPath);
-	if err != nil {
-		p.handleFailure(workerID, j, err);
-		return
-	}
-	defer outputFile.Close();
+	var outputKeys []string
+	ctx := context.Background()
+	for _, res := range renditions {
+		// make temp path
+		tempOutputPath := filepath.Join(os.TempDir(), j.ID+"-"+res+"-output.mp4");
+		
+		if err := p.ffmpeg.Transcode(ctx, tempInputPath, tempOutputPath, "medium", res); err != nil {
+			p.handleFailure(workerID, j, err)
+			return
+		}
 
-	// save the file to the disk / minio
-	outputKey, err := p.files.Save(j.ID+"-output.mp4", outputFile);
-	if err != nil {
-		p.handleFailure(workerID, j, err);
-		return
+		// open the output file
+		outputFile, err := os.Open(tempOutputPath);
+		if err != nil {
+			os.Remove(tempOutputPath)
+			p.handleFailure(workerID, j, err)
+			return
+		}
+
+		// save the output file to disk / minio
+		outputName := j.ID + "-" + res + "-output.mp4";
+		outputKey, err := p.files.Save(outputName, outputFile)
+		outputFile.Close();
+		os.Remove(tempOutputPath);
+
+		if err != nil {
+			p.handleFailure(workerID, j, err)
+			return
+		}
+
+		outputKeys = append(outputKeys, outputKey)
 	}
 
 	// mark as done
 	j.Status = job.StatusDone;
-	j.OutputKeys = []string{outputKey};
+	j.OutputKeys = outputKeys
 	p.store.Save(j)
 	slog.Info("job completed",
 		"worker_id", workerID,
 		"job_id", j.ID,
-		"output_key", outputKey,
+		"output_key", outputKeys,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 
