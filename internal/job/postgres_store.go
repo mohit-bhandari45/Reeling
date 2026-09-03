@@ -52,7 +52,7 @@ func (s *PostgresStore) Save(j *Job) error {
 
 func (s *PostgresStore) Get(id string) (*Job, error) {
 	query := `
-		SELECT id, input_key, output_keys, status, error, attempts, webhook_url, created_at, updated_at
+		SELECT id, input_key, output_keys, status, error, attempts, webhook_url,renditions, created_at, updated_at
 		FROM jobs
 		WHERE id = $1
 	`

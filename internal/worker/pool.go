@@ -23,7 +23,7 @@ type Pool struct {
 	store  job.Store
 	files  storage.Storage
 	ffmpeg *ffmpeg.Runner
-	js jetstream.JetStream
+	js     jetstream.JetStream
 }
 
 func NewPool(size int, store job.Store, files storage.Storage, runner *ffmpeg.Runner, js jetstream.JetStream) *Pool {
@@ -31,15 +31,15 @@ func NewPool(size int, store job.Store, files storage.Storage, runner *ffmpeg.Ru
 		store:  store,
 		files:  files,
 		ffmpeg: runner,
-		js: js,
+		js:     js,
 	}
 
-	ctx := context.Background();
+	ctx := context.Background()
 	if err := queue.EnsureStream(ctx, js); err != nil {
 		log.Fatalf("failed to ensure stream: %v", err)
 	}
 
-	cons, err := queue.CreateConsumer(ctx, js);
+	cons, err := queue.CreateConsumer(ctx, js)
 	if err != nil {
 		log.Fatalf("failed to create consumer: %v", err)
 	}
@@ -52,38 +52,38 @@ func NewPool(size int, store job.Store, files storage.Storage, runner *ffmpeg.Ru
 }
 
 func (p *Pool) Enqueue(j *job.Job) error {
-	j.Status = job.StatusQueued;
+	j.Status = job.StatusQueued
 	if err := p.store.Save(j); err != nil {
-		return err;
+		return err
 	}
 
-	data, err := json.Marshal(j);
+	data, err := json.Marshal(j)
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
-	return queue.Publish(ctx, p.js, data);
+	return queue.Publish(ctx, p.js, data)
 }
 
 func (p *Pool) startWorker(id int, cons jetstream.Consumer) {
 	for {
-		msgs, err := cons.Fetch(1);
+		msgs, err := cons.Fetch(1)
 		if err != nil {
 			log.Printf("worker %d: fetch error: %v", id, err)
 			continue
 		}
 
 		for msg := range msgs.Messages() {
-			var j job.Job;
+			var j job.Job
 			if err := json.Unmarshal(msg.Data(), &j); err != nil {
 				log.Printf("worker %d: failed to unmarshal job: %v", id, err)
 				msg.Ack()
 				continue
 			}
 
-			p.process(id, &j);
-			msg.Ack();
+			p.process(id, &j)
+			msg.Ack()
 		}
 	}
 }
@@ -92,14 +92,14 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	start := time.Now()
 
 	// check if this is already processed
-	existing, err := p.store.Get(j.ID);
+	existing, err := p.store.Get(j.ID)
 	if err == nil && (existing.Status == job.StatusDone || existing.Status == job.StatusFailed) {
 		slog.Info("job already finished, skipping reprocessing",
 			"worker_id", workerID,
 			"job_id", j.ID,
 			"status", existing.Status,
 		)
-		return;
+		return
 	}
 
 	// mark process as processing
@@ -110,37 +110,37 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	}
 
 	// open the file
-	inputFile, err := p.files.Open(j.InputKey);
+	inputFile, err := p.files.Open(j.InputKey)
 	if err != nil {
-		p.handleFailure(workerID, j, err);
-		return;
+		p.handleFailure(workerID, j, err)
+		return
 	}
 
 	// close the file as well
-	defer inputFile.Close();
+	defer inputFile.Close()
 
 	// create temporary file paths
 	// inputFile is reader -> but ffmpeg needs actual path
 	// ffmpeg -i /tmp/abc123-input.mp4 ...  -> needs path
-	tempInputPath := filepath.Join(os.TempDir(), j.ID+"-input.mp4");
+	tempInputPath := filepath.Join(os.TempDir(), j.ID+"-input.mp4")
 
-	tempFile, err := os.Create(tempInputPath);
+	tempFile, err := os.Create(tempInputPath)
 	if err != nil {
-		p.handleFailure(workerID, j, err);
+		p.handleFailure(workerID, j, err)
 		return
 	}
 
 	// copy the file and close the file and delete it
 	if _, err := io.Copy(tempFile, inputFile); err != nil {
-		tempFile.Close();
-		p.handleFailure(workerID, j, err);
+		tempFile.Close()
+		p.handleFailure(workerID, j, err)
 		return
 	}
-	tempFile.Close();
-	defer os.Remove(tempInputPath);
-	
+	tempFile.Close()
+	defer os.Remove(tempInputPath)
+
 	// transcode now
-	renditions := j.Renditions;
+	renditions := j.Renditions
 	if len(renditions) == 0 {
 		renditions = []string{""}
 	}
@@ -149,15 +149,15 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	ctx := context.Background()
 	for _, res := range renditions {
 		// make temp path
-		tempOutputPath := filepath.Join(os.TempDir(), j.ID+"-"+res+"-output.mp4");
-		
+		tempOutputPath := filepath.Join(os.TempDir(), j.ID+"-"+res+"-output.mp4")
+
 		if err := p.ffmpeg.Transcode(ctx, tempInputPath, tempOutputPath, "medium", res); err != nil {
 			p.handleFailure(workerID, j, err)
 			return
 		}
 
 		// open the output file
-		outputFile, err := os.Open(tempOutputPath);
+		outputFile, err := os.Open(tempOutputPath)
 		if err != nil {
 			os.Remove(tempOutputPath)
 			p.handleFailure(workerID, j, err)
@@ -165,10 +165,10 @@ func (p *Pool) process(workerID int, j *job.Job) {
 		}
 
 		// save the output file to disk / minio
-		outputName := j.ID + "-" + res + "-output.mp4";
+		outputName := j.ID + "-" + res + "-output.mp4"
 		outputKey, err := p.files.Save(outputName, outputFile)
-		outputFile.Close();
-		os.Remove(tempOutputPath);
+		outputFile.Close()
+		os.Remove(tempOutputPath)
 
 		if err != nil {
 			p.handleFailure(workerID, j, err)
@@ -179,7 +179,7 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	}
 
 	// mark as done
-	j.Status = job.StatusDone;
+	j.Status = job.StatusDone
 	j.OutputKeys = outputKeys
 	p.store.Save(j)
 	slog.Info("job completed",
@@ -189,32 +189,32 @@ func (p *Pool) process(workerID int, j *job.Job) {
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 
-	p.sendWebhook(workerID, j);
+	p.sendWebhook(workerID, j)
 }
 
-const MaxAttempts = 3;
+const MaxAttempts = 3
 
 func (p *Pool) handleFailure(workerID int, j *job.Job, cause error) {
-	j.Attempts++;
-	j.Error = cause.Error();
+	j.Attempts++
+	j.Error = cause.Error()
 
 	if j.Attempts >= MaxAttempts {
-		j.Status = job.StatusFailed;
-		p.store.Save(j);
+		j.Status = job.StatusFailed
+		p.store.Save(j)
 		slog.Error("job permanently failed",
 			"worker_id", workerID,
 			"job_id", j.ID,
 			"attempts", j.Attempts,
 			"error", cause,
 		)
-		p.sendWebhook(workerID, j);
+		p.sendWebhook(workerID, j)
 		return
 	}
 
-	j.Status = job.StatusQueued;
-	p.store.Save(j);
+	j.Status = job.StatusQueued
+	p.store.Save(j)
 
-	data, err := json.Marshal(j);
+	data, err := json.Marshal(j)
 	if err != nil {
 		slog.Error("failed to marshal job for retry",
 			"worker_id", workerID,
@@ -224,7 +224,7 @@ func (p *Pool) handleFailure(workerID int, j *job.Job, cause error) {
 		return
 	}
 
-	ctx := context.Background();
+	ctx := context.Background()
 	if err := queue.Publish(ctx, p.js, data); err != nil {
 		slog.Error("failed to republish job for retry",
 			"worker_id", workerID,
@@ -245,16 +245,16 @@ func (p *Pool) handleFailure(workerID int, j *job.Job, cause error) {
 
 func (p *Pool) sendWebhook(workerID int, j *job.Job) {
 	if j.WebhookURL == "" {
-		return;
+		return
 	}
 
-	data, err := json.Marshal(j);
+	data, err := json.Marshal(j)
 	if err != nil {
 		slog.Error("failed to marshal job for webhook", "worker_id", workerID, "job_id", j.ID, "error", err)
 		return
 	}
 
-	resp, err := http.Post(j.WebhookURL, "application/json", bytes.NewReader(data));
+	resp, err := http.Post(j.WebhookURL, "application/json", bytes.NewReader(data))
 	if err != nil {
 		slog.Error("failed to send webhook", "worker_id", workerID, "job_id", j.ID, "webhook_url", j.WebhookURL, "error", err)
 		return

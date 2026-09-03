@@ -52,12 +52,18 @@ func (s *Server) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	webhookURL := r.FormValue("webhook_url");
+
+	var renditions []string
+	if r.FormValue("renditions") != "" {
+		renditions = strings.Split(r.FormValue("renditions"), ",");
+	}
 	
 	j := &job.Job{
 		ID: uuid.NewString(),
 		InputKey: key,
 		Status: job.StatusQueued,
 		WebhookURL: webhookURL,
+		Renditions: renditions,
 	}
 	if err := s.pool.Enqueue(j); err != nil {
 		slog.Error("failed to enqueue job", "job_id", j.ID, "error", err)
