@@ -31,8 +31,8 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 
 func (s *PostgresStore) Save(j *Job) error {
 	query := `
-		INSERT INTO jobs (id, input_key, output_keys, status, error, attempts, webhook_url, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
+		INSERT INTO jobs (id, input_key, output_keys, status, error, attempts, webhook_url, renditions, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())
 		ON CONFLICT (id) DO UPDATE SET
 			input_key = EXCLUDED.input_key,
 			output_keys = EXCLUDED.output_keys,
@@ -40,9 +40,10 @@ func (s *PostgresStore) Save(j *Job) error {
 			error = EXCLUDED.error,
 			attempts = EXCLUDED.attempts,
 			webhook_url = EXCLUDED.webhook_url,
+			renditions = EXCLUDED.renditions,
 			updated_at = now()
 	`
-	_, err := s.db.Exec(query, j.ID, j.InputKey, pq.Array(j.OutputKeys), j.Status, j.Error, j.Attempts, j.WebhookURL)
+	_, err := s.db.Exec(query, j.ID, j.InputKey, pq.Array(j.OutputKeys), j.Status, j.Error, j.Attempts, j.WebhookURL, pq.Array(j.Renditions))
 	if err != nil {
 		return fmt.Errorf("failed to save job: %w", err)
 	}
@@ -58,6 +59,7 @@ func (s *PostgresStore) Get(id string) (*Job, error) {
 
 	var j Job
 	var outputKeys []string
+	var renditions []string
 	var errText sql.NullString;
 	var webhookURL sql.NullString
 
@@ -69,6 +71,7 @@ func (s *PostgresStore) Get(id string) (*Job, error) {
 		&errText,
 		&j.Attempts,
 		&webhookURL,
+		pq.Array(&renditions),
 		&j.CreatedAt,
 		&j.UpdatedAt,
 	)
@@ -83,6 +86,7 @@ func (s *PostgresStore) Get(id string) (*Job, error) {
 	j.OutputKeys = outputKeys;
 	j.Error = errText.String;
 	j.WebhookURL = webhookURL.String
+	j.Renditions = renditions
 
 	return &j, nil
 }

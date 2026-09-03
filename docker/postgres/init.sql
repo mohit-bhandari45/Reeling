@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     error        TEXT,
     attempts     INT NOT NULL DEFAULT 0,
     webhook_url  TEXT,
+    renditions   TEXT[],
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
