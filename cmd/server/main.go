@@ -59,12 +59,17 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	apiKey := os.Getenv("API_KEY")
+	if apiKey == "" {
+		log.Fatal("API_KEY environment variable must be set")
+	}
+
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})
 
-	mux.HandleFunc("/videos", server.HandleUpload)
-	mux.HandleFunc("/jobs/", server.HandleGetJob)
+	mux.HandleFunc("/videos", api.RequireAPIKey(apiKey, server.HandleUpload))
+	mux.HandleFunc("/jobs/", api.RequireAPIKey(apiKey, server.HandleGetJob))
 
 	log.Println("Server started on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {

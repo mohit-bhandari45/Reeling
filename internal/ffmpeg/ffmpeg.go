@@ -26,7 +26,7 @@ func (r *Runner) Transcode(ctx context.Context, input, output, preset string) er
 		return fmt.Errorf("ffmpeg transcode failed: %w\n%s", err, out);
 	}
 	return nil
-}	
+}
 
 func (r *Runner) Thumbnail(ctx context.Context, input, output string, atSeconds int) error {
 	cmd := exec.CommandContext(ctx, "ffmpeg",
