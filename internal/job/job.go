@@ -15,6 +15,7 @@ type Job struct {
 	ID string `json:"id"`
 	InputKey string `json:"input_key"`
 	OutputKeys []string `json:"output_keys,omitempty"`
+	ThumbnailKey string `json:"thumbnail_key,omitempty"`
 	Status Status `json:"status"`
 	Error string `json:"error,omitempty"`
 	Attempts int `json:"attempts"`

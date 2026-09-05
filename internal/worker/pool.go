@@ -139,6 +139,39 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	tempFile.Close()
 	defer os.Remove(tempInputPath)
 
+	// generate thumbnail
+	tempThumbPath := filepath.Join(os.TempDir(), j.ID+"-thumb.jpg")
+	if err := p.ffmpeg.Thumbnail(context.Background(), tempInputPath, tempThumbPath, 1); err != nil {
+		slog.Warn("failed to generate thumbnail, continuing without it",
+			"worker_id", workerID,
+			"job_id", j.ID,
+			"error", err,
+		)
+	} else {
+		thumbFile, err := os.Open(tempThumbPath)
+		if err != nil {
+			slog.Warn("failed to open generated thumbnail",
+				"worker_id", workerID,
+				"job_id", j.ID,
+				"error", err,
+			)
+		} else {
+			thumbKey, err := p.files.Save(j.ID+"-thumb.jpg", thumbFile)
+			thumbFile.Close()
+			os.Remove(tempThumbPath)
+
+			if err != nil {
+				slog.Warn("failed to save thumbnail",
+					"worker_id", workerID,
+					"job_id", j.ID,
+					"error", err,
+				)
+			} else {
+				j.ThumbnailKey = thumbKey
+			}
+		}
+	}
+
 	// transcode now
 	renditions := j.Renditions
 	if len(renditions) == 0 {
