@@ -3,7 +3,10 @@ package ffmpeg
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 )
 
 type Runner struct {}
@@ -58,4 +61,62 @@ func (r *Runner) Thumbnail(ctx context.Context, input, output string, atSeconds 
 		return fmt.Errorf("ffmpeg thumbnail failed: %w\n%s", err, out)
 	}
 	return nil
+}
+
+func (r *Runner) TranscodeHLS(ctx context.Context, input, outputDir, resolution string) error {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create output dir: %w", err)
+	}
+
+	args := []string {
+		"-i", input,
+		"-c:v", "libx264",
+		"-c:a", "aac",
+	}
+
+	if resolution != "" {
+		height, ok := resolutionHeights[resolution]
+		if !ok {
+			return fmt.Errorf("unknown resolution: %s", resolution)
+		}
+		args = append(args, "-vf", fmt.Sprintf("scale=-2:%s", height));
+	}
+
+	args = append(args, 
+		"-hls_time", "6",
+		"-hls_playlist_type", "vod",
+		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d"),
+		"-y",
+		filepath.Join(outputDir, "playlist.m3u8"),
+	)
+
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...);
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("ffmpeg hls transcode failed: %w\n%s", err, out)
+	}
+	return nil
+}
+
+
+type RenditionInfo struct {
+	Name string
+	Bandwidth int
+	Width int
+	Height int
+}
+
+func BuildMasterPlaylist(renditions []RenditionInfo) string {
+	var sb strings.Builder;
+	sb.WriteString("#EXTM3U\n")
+
+	for _, r := range renditions {
+		sb.WriteString(fmt.Sprintf(
+			"#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%dx%d\n%s/playlist.m3u8\n",
+			r.Bandwidth, r.Width, r.Height, r.Name,
+		))
+	}
+
+	return sb.String();
 }
