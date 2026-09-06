@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Reeling HLS Test Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    video {
+      width: 100%;
+      background: #000;
+    }
+    .info {
+      margin-top: 12px;
+      font-size: 14px;
+      color: #555;
+      word-break: break-all;
+    }
+    label {
+      display: block;
+      margin-top: 20px;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <h2>Reeling HLS Test Player</h2>
+
+  <label for="masterUrl">Master playlist URL</label>
+  <input
+    id="masterUrl"
+    type="text"
+    value="http://localhost:9000/reeling-videos/12e19b51-4b13-42dd-a5ad-b52d4d8f8ff6/master.m3u8"
+  />
+
+  <label for="thumbUrl">Thumbnail (poster) URL</label>
+  <input
+    id="thumbUrl"
+    type="text"
+    value="http://localhost:9000/reeling-videos/142b7229-5ee7-4763-bd60-1e03113ef0ec-12e19b51-4b13-42dd-a5ad-b52d4d8f8ff6-thumb.jpg"
+  />
+
+  <button onclick="loadVideo()">Load / Reload</button>
+
+  <video id="video" controls></video>
+
+  <div class="info" id="status">Not loaded yet.</div>
+
+  <script>
+    let hls = null;
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+
+    function loadVideo() {
+      const masterUrl = document.getElementById('masterUrl').value.trim();
+      const thumbUrl = document.getElementById('thumbUrl').value.trim();
+
+      video.poster = thumbUrl;
+
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+
+      if (Hls.isSupported()) {
+        hls = new Hls();
+        hls.loadSource(masterUrl);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+          const levels = data.levels.map(l => `${l.height}p (${Math.round(l.bitrate / 1000)}kbps)`).join(', ');
+          status.textContent = `Loaded. Available renditions: ${levels}`;
+        });
+
+        hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+          const level = hls.levels[data.level];
+          status.textContent = `Playing at: ${level.height}p (${Math.round(level.bitrate / 1000)}kbps)`;
+        });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          status.textContent = `Error: ${data.type} - ${data.details}`;
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = masterUrl;
+        status.textContent = 'Loaded via native Safari HLS support.';
+      } else {
+        status.textContent = 'HLS is not supported in this browser.';
+      }
+    }
+
+    // auto-load on page open
+    loadVideo();
+  </script>
+</body>
+</html>
