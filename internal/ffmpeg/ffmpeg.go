@@ -78,13 +78,13 @@ func (r *Runner) TranscodeHLS(ctx context.Context, input, outputDir, resolution 
 		if !ok {
 			return fmt.Errorf("unknown resolution: %s", resolution);
 		}
-		args = append(args, "-vf", fmt.Sprintf("scale=-2%s", height));
+		args = append(args, "-vf", fmt.Sprintf("scale=-2:%s", height));
 	}
 
 	args = append(args, 
 		"-hls_time", "6",
 		"-hls_playlist_type", "vod",
-		"-hls_segment_file", filepath.Join(outputDir, "segment%03d.ts"),
+		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
 		"-y", filepath.Join(outputDir, "playlist.m3u8"),
 	)
 

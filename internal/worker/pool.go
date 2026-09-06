@@ -199,13 +199,12 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	}
 
 	var outputKeys []string
-	ctx := context.Background()
+
 	for _, res := range renditions {
-		// make temp path
-		tempOutputPath := filepath.Join(os.TempDir(), j.ID+"-"+res+"-output.mp4")
+		// make temp local path
 		localOutDir := filepath.Join(os.TempDir(), j.ID, res);
 
-		if err := p.ffmpeg.TranscodeHLS(ctx, tempInputPath, localOutDir, res); err != nil {
+		if err := p.ffmpeg.TranscodeHLS(context.Background(), tempInputPath, localOutDir, res); err != nil {
 			p.handleFailure(workerID, j, err)
 			return
 		}
@@ -217,27 +216,7 @@ func (p *Pool) process(workerID int, j *job.Job) {
 		}
 
 		os.RemoveAll(localOutDir);
-
-		// open the output file
-		outputFile, err := os.Open(tempOutputPath)
-		if err != nil {
-			os.Remove(tempOutputPath)
-			p.handleFailure(workerID, j, err)
-			return
-		}
-
-		// save the output file to disk / minio
-		outputName := j.ID + "-" + res + "-output.mp4"
-		outputKey, err := p.files.Save(outputName, outputFile)
-		outputFile.Close()
-		os.Remove(tempOutputPath)
-
-		if err != nil {
-			p.handleFailure(workerID, j, err)
-			return
-		}
-
-		outputKeys = append(outputKeys, outputKey)
+		outputKeys = append(outputKeys, remotePrefix+"/playlist.m3u8");
 	}
 
 	// mark as done

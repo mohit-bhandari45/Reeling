@@ -28,12 +28,3 @@ func TestTranscodeHLSManual(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
-func TestBuildMasterPlaylistManual(t *testing.T) {
-	playlist := BuildMasterPlaylist([]RenditionInfo{
-		{Name: "1080p", Bandwidth: 5000000, Width: 1920, Height: 1080},
-		{Name: "720p", Bandwidth: 2800000, Width: 1280, Height: 720},
-		{Name: "480p", Bandwidth: 1400000, Width: 854, Height: 480},
-	})
-	t.Logf("\n%s", playlist)
-}
