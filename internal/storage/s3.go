@@ -84,6 +84,18 @@ func (s *S3Storage) Save(name string, r io.Reader) (string, error) {
 	return key, nil
 }
 
+func (s *S3Storage) SaveAt(key string, r io.Reader) error {
+	_, err := s.client.PutObject(context.Background(), &s3.PutObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key: aws.String(key),
+		Body: r,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload to s3: %w", err)
+	}
+	return nil
+}
+
 func (s *S3Storage) Open(key string) (io.ReadCloser, error) {
 	result, err := s.client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: &s.bucket,

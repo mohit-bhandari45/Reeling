@@ -35,6 +35,23 @@ func (d *LocalDisk) Save(name string, r io.Reader) (string, error) {
 	return key, nil;
 }
 
+func (d *LocalDisk) SaveAt(key string, r io.Reader) error {
+	path := filepath.Join(d.BaseDir, key)
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	f, err := os.Create(path);
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, r);
+	return err;
+}
+
 func (d *LocalDisk) Open(key string) (io.ReadCloser, error) {
 	return os.Open(filepath.Join(d.BaseDir, key));
 }

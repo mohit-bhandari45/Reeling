@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -64,6 +65,35 @@ func (p *Pool) Enqueue(j *job.Job) error {
 
 	ctx := context.Background()
 	return queue.Publish(ctx, p.js, data)
+}
+
+func (p *Pool) uploadDir(localDir, remotePrefix string) error {
+	entries, err := os.ReadDir(localDir);
+	if err != nil {
+		return fmt.Errorf("failed to read dir %s: %w", localDir, err);
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue;
+		}
+
+		localPath := filepath.Join(localDir, entry.Name())
+		remoteKey := remotePrefix + "/" + entry.Name();
+
+		f, err := os.Open(localPath);
+		if err != nil {
+			return fmt.Errorf("failed to open %s: %w", localPath, err);
+		}
+
+		err = p.files.SaveAt(remoteKey, f);
+		f.Close();
+		if err != nil {
+			return fmt.Errorf("failed to upload %s: %w", localPath, err)
+		}
+	}
+
+	return nil;
 }
 
 func (p *Pool) startWorker(id int, cons jetstream.Consumer) {
@@ -143,29 +173,19 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	tempThumbPath := filepath.Join(os.TempDir(), j.ID+"-thumb.jpg")
 	if err := p.ffmpeg.Thumbnail(context.Background(), tempInputPath, tempThumbPath, 1); err != nil {
 		slog.Warn("failed to generate thumbnail, continuing without it",
-			"worker_id", workerID,
-			"job_id", j.ID,
-			"error", err,
-		)
+			"worker_id", workerID, "job_id", j.ID, "error", err)
 	} else {
 		thumbFile, err := os.Open(tempThumbPath)
 		if err != nil {
 			slog.Warn("failed to open generated thumbnail",
-				"worker_id", workerID,
-				"job_id", j.ID,
-				"error", err,
-			)
+				"worker_id", workerID, "job_id", j.ID, "error", err)
 		} else {
 			thumbKey, err := p.files.Save(j.ID+"-thumb.jpg", thumbFile)
 			thumbFile.Close()
 			os.Remove(tempThumbPath)
-
 			if err != nil {
 				slog.Warn("failed to save thumbnail",
-					"worker_id", workerID,
-					"job_id", j.ID,
-					"error", err,
-				)
+					"worker_id", workerID, "job_id", j.ID, "error", err)
 			} else {
 				j.ThumbnailKey = thumbKey
 			}
@@ -175,7 +195,7 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	// transcode now
 	renditions := j.Renditions
 	if len(renditions) == 0 {
-		renditions = []string{""}
+		renditions = []string{"720p"}
 	}
 
 	var outputKeys []string
@@ -183,11 +203,20 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	for _, res := range renditions {
 		// make temp path
 		tempOutputPath := filepath.Join(os.TempDir(), j.ID+"-"+res+"-output.mp4")
+		localOutDir := filepath.Join(os.TempDir(), j.ID, res);
 
-		if err := p.ffmpeg.Transcode(ctx, tempInputPath, tempOutputPath, "medium", res); err != nil {
+		if err := p.ffmpeg.TranscodeHLS(ctx, tempInputPath, localOutDir, res); err != nil {
 			p.handleFailure(workerID, j, err)
 			return
 		}
+
+		remotePrefix := j.ID + "/" + res;
+		if err := p.uploadDir(localOutDir, remotePrefix); err != nil {
+			p.handleFailure(workerID, j, err)
+			return
+		}
+
+		os.RemoveAll(localOutDir);
 
 		// open the output file
 		outputFile, err := os.Open(tempOutputPath)
