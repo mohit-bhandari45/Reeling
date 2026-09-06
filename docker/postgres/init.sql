@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     attempts       INT NOT NULL DEFAULT 0,
     webhook_url    TEXT,
     renditions     TEXT[],
+    duration       DOUBLE PRECISION,
+    source_width   INT,
+    source_height  INT,
+    source_codec   TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );

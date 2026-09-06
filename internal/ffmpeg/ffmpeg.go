@@ -2,6 +2,7 @@ package ffmpeg
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -144,4 +145,61 @@ func BuildMasterPlaylist(renditiosInfo []RenditionInfo) string {
 	}
 
 	return sb.String();
+}
+
+type VideoInfo struct {
+	Duration float64 `json:"duration"`
+	Width    int     `json:"width"`
+	Height   int     `json:"height"`
+	Codec    string  `json:"codec"`
+}
+
+type probeFormat struct {
+	Duration string `json:"duration"`
+}
+
+type probeStream struct {
+	CodecType string `json:"codec_type"`
+	CodecName string `json:"codec_name"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+}
+
+type probeOutput struct {
+	Format  probeFormat   `json:"format"`
+	Streams []probeStream `json:"streams"`
+}
+
+func (r *Runner) Probe(ctx context.Context, input string) (*VideoInfo, error) {
+	cmd := exec.CommandContext(ctx, "ffprobe",
+		"-v", "error",
+		"-show_format",
+		"-show_streams",
+		"-of", "json",
+		input,
+	)
+
+	out, err := cmd.Output();
+	if err != nil {
+		return nil, fmt.Errorf("ffprobe failed: %w", err)
+	}
+
+	var probed probeOutput
+	if err := json.Unmarshal(out, &probed); err != nil {
+		return nil, fmt.Errorf("failed to parse ffprobe output: %w", err)
+	}
+
+	info := &VideoInfo{};
+	fmt.Sscanf(probed.Format.Duration, "%f", &info.Duration);
+
+	for _, s := range probed.Streams {
+		if s.CodecType == "video" {
+			info.Width = s.Width;
+			info.Height = s.Height;
+			info.Codec = s.CodecName;
+			break
+		}
+	}
+
+	return info, nil;
 }

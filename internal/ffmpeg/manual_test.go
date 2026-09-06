@@ -36,3 +36,12 @@ func TestBuildMasterPlaylistManual(t *testing.T) {
 	})
 	t.Logf("\n%s", playlist)
 }
+
+func TestProbeManual(t *testing.T) {
+	r := NewRunner()
+	info, err := r.Probe(context.Background(), "sample.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("duration=%.2fs width=%d height=%d codec=%s", info.Duration, info.Width, info.Height, info.Codec)
+}

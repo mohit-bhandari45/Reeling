@@ -170,6 +170,17 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	tempFile.Close()
 	defer os.Remove(tempInputPath)
 
+	info, err := p.ffmpeg.Probe(context.Background(), tempInputPath);
+	if err != nil {
+		slog.Warn("failed to probe video metadata, continuing without it",
+			"worker_id", workerID, "job_id", j.ID, "error", err)
+	} else {
+		j.Duration = info.Duration
+		j.SourceWidth = info.Width
+		j.SourceHeight = info.Height
+		j.SourceCodec = info.Codec
+	}
+
 	// generate thumbnail
 	tempThumbPath := filepath.Join(os.TempDir(), j.ID+"-thumb.jpg")
 	if err := p.ffmpeg.Thumbnail(context.Background(), tempInputPath, tempThumbPath, 1); err != nil {

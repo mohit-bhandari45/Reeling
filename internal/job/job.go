@@ -21,6 +21,10 @@ type Job struct {
 	Attempts int `json:"attempts"`
 	WebhookURL  string    `json:"webhook_url,omitempty"`
 	Renditions  []string  `json:"renditions,omitempty"`
+	Duration       float64   `json:"duration,omitempty"`
+	SourceWidth    int       `json:"source_width,omitempty"`
+	SourceHeight   int       `json:"source_height,omitempty"`
+	SourceCodec    string    `json:"source_codec,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
