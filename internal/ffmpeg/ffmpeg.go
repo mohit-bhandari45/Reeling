@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 type Runner struct {}
@@ -14,11 +15,44 @@ func NewRunner() *Runner {
 	return &Runner{}
 }
 
+// resolution heights struct
 var resolutionHeights = map[string]string {
 	"1080p": "1080",
 	"720p":  "720",
 	"480p":  "480",
 	"360p":  "360",
+}
+
+// Master playlist file structs
+var renditionBandWidth = map[string]int {
+	"1080p": 5000000,
+	"720p":  2800000,
+	"480p":  1400000,
+	"360p":  800000,
+}
+
+var resolutionDimensions = map[string][2]int{
+	"1080p": {1920, 1080},
+	"720p":  {1280, 720},
+	"480p":  {854, 480},
+	"360p":  {640, 360},
+}
+
+func RenditionBandwidth(res string) int {
+	return renditionBandWidth[res]
+}
+
+func ResolutionDimensions(res string) (width, height int){
+	dims := resolutionDimensions[res];
+	return dims[0], dims[1];
+}
+
+// every rendition will have renditioninfo to check
+type RenditionInfo struct {
+	Name string
+	Bandwidth int
+	Width int
+	Height int
 }
 
 func (r *Runner) Transcode(ctx context.Context, input, output, preset, resolution string) error {
@@ -96,4 +130,18 @@ func (r *Runner) TranscodeHLS(ctx context.Context, input, outputDir, resolution 
 	}
 
 	return nil;
+}
+
+func BuildMasterPlaylist(renditiosInfo []RenditionInfo) string {
+	var sb strings.Builder;
+	sb.WriteString("#EXTM3U\n");
+
+	for _, r := range renditiosInfo {
+		sb.WriteString(fmt.Sprintf(
+			"#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%dx%d\n%s/playlist.m3u8\n",
+			r.Bandwidth, r.Width, r.Height, r.Name,
+		))
+	}
+
+	return sb.String();
 }

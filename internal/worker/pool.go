@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mohit-bhandari45/Reeling/internal/ffmpeg"
@@ -199,6 +200,7 @@ func (p *Pool) process(workerID int, j *job.Job) {
 	}
 
 	var outputKeys []string
+	var masterRenditions []ffmpeg.RenditionInfo
 
 	for _, res := range renditions {
 		// make temp local path
@@ -214,15 +216,29 @@ func (p *Pool) process(workerID int, j *job.Job) {
 			p.handleFailure(workerID, j, err)
 			return
 		}
-
 		os.RemoveAll(localOutDir);
-		outputKeys = append(outputKeys, remotePrefix+"/playlist.m3u8");
+
+		width, height := ffmpeg.ResolutionDimensions(res)
+		masterRenditions = append(masterRenditions, ffmpeg.RenditionInfo{
+			Name:      res,
+			Bandwidth: ffmpeg.RenditionBandwidth(res),
+			Width:     width,
+			Height:    height,
+		})
+	}
+
+	masterPlayList := ffmpeg.BuildMasterPlaylist(masterRenditions);
+	masterKey := j.ID + "/master.m3u8";
+	if err := p.files.SaveAt(masterKey, strings.NewReader(masterPlayList)); err != nil {
+		p.handleFailure(workerID, j, err)
+		return
 	}
 
 	// mark as done
 	j.Status = job.StatusDone
-	j.OutputKeys = outputKeys
+	j.OutputKeys = []string{masterKey}
 	p.store.Save(j)
+	
 	slog.Info("job completed",
 		"worker_id", workerID,
 		"job_id", j.ID,
